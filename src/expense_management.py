@@ -1,25 +1,21 @@
-import csv
-from src.utils import get_valid_month_year, read_csv, write_csv, file_exists, is_valid_date
+from utils import get_valid_month_year, is_valid_date, fetch_all, execute_query
 import datetime
 
-EXPENSES_FILE = 'data/expenses.csv'
-CATEGORIES_FILE = 'data/categories.csv'
+EXPENSES_FILE = 'data/expenses.db'
+CATEGORIES_FILE = 'data/categories.db'
 
 def load_categories():
-    """Load categories from CSV file or return default categories."""
-    if not file_exists(CATEGORIES_FILE):
+    """Load categories from database or return default categories."""
+    categories = fetch_all("SELECT category_name FROM categories")
+    if not categories:
         return ['Food', 'Travel', 'Utilities', 'Entertainment', 'Miscellaneous']
-    with open(CATEGORIES_FILE, 'r') as file:
-        reader = csv.DictReader(file)
-        return [row['Category'] for row in csv.DictReader(file)]
+    return [category[0] for category in categories]
 
 def save_categories(categories):
-    """Save categories in the CSV file."""
-    with open(CATEGORIES_FILE, 'w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=['Category'])
-        writer.writeheader()
-        for category in categories:
-            writer.writerow({'Category':category})
+    """Save categories in the database."""
+    for category in categories:
+        execute_query("INSERT OR IGNORE INTO categories (category_name) VALUES (?)", (category,))
+
 
 def manage_category():
     """Menu for managing categories"""
@@ -51,7 +47,7 @@ def manage_category():
                 to_remove = int(input("Enter the number of category to remove: ")) - 1
                 if 0 <= to_remove < len(categories):
                     removed = categories.pop(to_remove)
-                    save_categories(categories)
+                    execute_query("DELETE FROM categories WHERE category_name = ?", (removed,))
                     print(f"Category '{removed}' removed.")
                 else:
                     print("Invalid selection.")
@@ -80,20 +76,13 @@ def add_expense():
     # Adding date
     date = datetime.date.today().strftime('%Y-%m-%d')
 
-    # Defining headers
-    headers = ['Date', 'Category', 'Amount']
-
-    # Read the existing expenses
-    expenses = read_csv(EXPENSES_FILE)
-    
-    # Write the new expense
-    expenses.append({'Date': date, 'Category': category, 'Amount': amount})
-    write_csv(EXPENSES_FILE, headers, expenses)
+    # Insert the new expense into the database
+    execute_query("INSERT INTO expenses (date, category, amount) VALUES (?, ?, ?)", (date, category, amount))
 
     print(f"Added Expense: {date} - {category} - ₹{amount}")
 
 def display_expenses():
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT * FROM expenses")
     if not expenses:
         print("No expenses recorded yet.")
         return
@@ -102,17 +91,17 @@ def display_expenses():
     print(f"{'Date':<15}{'Category':<15}{'Amount':<10}")
     print("-" * 40)
     for row in expenses:
-        print(f"{row['Date']:<15}{row['Category']:<15}₹{row['Amount']:<10}")
+        print(f"{row[1]:<15}{row[2]:<15}₹{row[3]:<10}")
 
 def delete_by_index():
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT * FROM expenses")
     if not expenses:
         print("No expenses recorded yet.")
         return
 
     print("All Expenses")
     for i, row in enumerate(expenses, 1):
-        print(f"{i}. {row['Category']} - {row['Amount']} (Date: {row['Date']})")
+        print(f"{i}. {row[2]} - {row[1]} (Date: {row[1]})")
     
     try:
         index = int(input("\nEnter the index of the expense you want to delete: ")) - 1
@@ -123,10 +112,10 @@ def delete_by_index():
         print("Invalid index. Please enter a number.")
         return
     
-    confirm = input(f"Are you sure you want to delete the expense: {expenses[index]['Category']} - {expenses[index]['Amount']}?: ")
+    confirm = input(f"Are you sure you want to delete the expense: {expenses[index][2]} - {expenses[index][3]}?: ")
     if confirm.lower() == 'y':
-        expenses.pop(index)
-        write_csv(EXPENSES_FILE, ['Date', 'Category', 'Amount'], expenses)
+        expense_id = expenses[index][0]
+        execute_query("DELETE FROM expenses WHERE id = ?", (expense_id,))
         print("Expense deleted successfully.")
     else:
         print("Deletion cancelled.")
@@ -134,17 +123,12 @@ def delete_by_index():
 def delete_by_category():
     category_to_delete = input("Enter the category to delete(e.g., Food, Travel, etc): ").strip()
     
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT * FROM expenses WHERE category = ?", (category_to_delete,))
     if not expenses:
-        print("No expenses recorded yet.")
-        return
-
-    if not any(row['Category'] == category_to_delete for row in expenses):
         print(f"No expenses found for category '{category_to_delete}'")
         return
 
-    expenses = [row for row in expenses if row['Category'] != category_to_delete]
-    write_csv(EXPENSES_FILE, ['Date', 'Category', 'Amount'], expenses)
+    execute_query("DELETE FROM expenses WHERE category = ?", (category_to_delete,))
     print(f"All expenses for category '{category_to_delete}' have been deleted.")
 
 def delete_by_month_year():
@@ -153,11 +137,10 @@ def delete_by_month_year():
         print("Invalid month/year input. Please try again.")
         return
 
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT * FROM expenses WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?", (input_month, input_year))
     if not expenses:
-        print("No expenses recorded yet.")
+        print("No expenses recorded for this month/year.")
         return
 
-    expenses = [row for row in expenses if row['Date'][5:7] != input_month or row['Date'][:4] != input_year]
-    write_csv(EXPENSES_FILE, ['Date', 'Category', 'Amount'], expenses)
+    execute_query("DELETE FROM expenses WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?", (input_month, input_year))
     print(f"All expenses for {input_month}/{input_year} have been deleted.")

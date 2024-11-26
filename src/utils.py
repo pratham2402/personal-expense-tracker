@@ -1,20 +1,29 @@
-import csv
-import os
+import sqlite3
 import datetime
 
-def read_csv(file_name):
-    """Read CSV file and return content as list of dictionaries."""
-    if not os.path.exists(file_name) or os.path.getsize(file_name) == 0:
-        return []
-    with open(file_name, 'r') as file:
-        return list(csv.DictReader(file))
+DATABASE = 'data/expenses.db'
 
-def write_csv(file_name, fieldnames, rows):
-    """Write rows to a CSV file."""
-    with open(file_name, 'w', newline='') as file:
-        writer = csv.DictWriter(file, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(rows)
+def connect_db():
+    """Connect to SQLite database and return the connection object."""
+    conn = sqlite3.connect(DATABASE)
+    return conn
+
+def execute_query(query, params=()):
+    """Execute a query that doesn't return data (like INSERT, DELETE, UPDATE)."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    conn.commit()
+    conn.close()
+
+def fetch_all(query, params=()):
+    """Execute a SELECT query and return all results."""
+    conn = connect_db()
+    cursor = conn.cursor()
+    cursor.execute(query, params)
+    results = cursor.fetchall()
+    conn.close()
+    return results
 
 def get_valid_month_year():
     """Prompt user to input a valid month and year."""
@@ -29,11 +38,9 @@ def get_valid_month_year():
         except ValueError:
             print("Enter valid numeric values for month and year.")
 
-def file_exists(file_name):
-    """Check if a file exists and is not empty."""
-    return os.path.exists(file_name) and os.path.getsize(file_name) > 0
 
 def is_valid_date(year, month):
+    """Check if the year and month form a valid date."""
     try:
         datetime.date(year = int(year), month = int(month), day=1)
         return True

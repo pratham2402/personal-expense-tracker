@@ -1,24 +1,16 @@
-import csv
-from src.utils import read_csv, get_valid_month_year, is_valid_date  # No need for os import
+from utils import fetch_all, execute_query, get_valid_month_year, is_valid_date
 import matplotlib.pyplot as plt
-
-EXPENSES_FILE = 'data/expenses.csv'
+import csv 
 
 def category_summary():
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT category, SUM(amount) FROM expenses GROUP BY category")
     if not expenses:
         print("No expenses recorded yet.")
         return
-    
-    summary = {}
-    for row in expenses:
-        category = row['Category']
-        amount = float(row['Amount'])
-        summary[category] = summary.get(category, 0) + amount
 
     print('\nCategory Summary')
-    for category, total in summary.items():
-        print(f'{category}: ₹{total}')
+    for category, total in expenses:
+        print(f'{category}: ₹{total:.2f}')
 
 def display_monthly_report():
     input_month, input_year = get_valid_month_year()
@@ -26,24 +18,13 @@ def display_monthly_report():
         print("Invalid month/year input. Please try again.")
         return
 
-    expenses = read_csv(EXPENSES_FILE)
-    if not expenses:
-        print("No expenses recorded yet.")
-        return
+    expenses = fetch_all(
+        "SELECT SUM(amount) FROM expenses WHERE strftime('%m', date) = ? AND strftime('%Y', date) = ?", 
+        (input_month, input_year)
+    )
+    total_expenses = expenses[0][0] if expenses[0][0] is not None else 0
 
-    total_expenses = 0
-    record_found = False
-
-    for row in expenses:
-        date = row['Date']
-        expense_month = date[5:7]
-        expense_year = date[:4]
-
-        if input_month == expense_month and input_year == expense_year:
-            total_expenses += float(row['Amount'])
-            record_found = True
-    
-    if record_found:
+    if total_expenses > 0:
         print(f'Total Expenses for {input_month}/{input_year}: ₹{total_expenses:.2f}')
     else:
         print(f'No expenses recorded for {input_month}/{input_year}.')
@@ -51,42 +32,40 @@ def display_monthly_report():
 def sort_expenses():
     print("Sort by: 1. Date 2. Category 3. Amount")
     choice = input('Choose: ')
-    expenses = read_csv(EXPENSES_FILE)
 
     if choice == '1':
-        expenses.sort(key=lambda x: x['Date'])
+        expenses = fetch_all("SELECT date, category, amount FROM expenses ORDER BY date")
     elif choice == '2':
-        expenses.sort(key=lambda x: x['Category'])
+        expenses = fetch_all("SELECT date, category, amount FROM expenses ORDER BY category")
     elif choice == '3':
-        expenses.sort(key=lambda x: x['Amount'])
-    
+        expenses = fetch_all("SELECT date, category, amount FROM expenses ORDER BY amount")
+    else:
+        print("Invalid choice. No sorting applied.")
+        return
+
     print("\nSorted Expenses")
-    for row in expenses:
-        print(f"{row['Date']} - {row['Category']} : ₹{row['Amount']}")
+    for date, category, amount in expenses:
+        print(f"{date} - {category} : ₹{amount:.2f}")
 
 def export_data():
     export_file = input("Enter the name of the file to export data to (e.g., summary.csv): ")
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT date, category, amount FROM expenses")
+
     with open(export_file, 'w', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=['Date', 'Category', 'Amount'])
         writer.writeheader()
-        writer.writerows(expenses)
+        writer.writerows([{'Date': date, 'Category': category, 'Amount': amount} for date, category, amount in expenses])
+    
     print(f"Data exported to {export_file}.")
 
 def visualize_expenses():
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT category, SUM(amount) FROM expenses GROUP BY category")
     if not expenses:
         print("No expenses recorded yet.")
         return
     
-    summary = {}
-    for row in expenses:
-        category = row['Category']
-        amount = float(row['Amount'])
-        summary[category] = summary.get(category, 0) + amount
-    
-    categories = list(summary.keys())
-    amounts = list(summary.values())
+    categories = [row[0] for row in expenses]
+    amounts = [row[1] for row in expenses]
 
     plt.figure(figsize=(8, 6))
     plt.pie(amounts, labels=categories, autopct='%1.1f%%')
@@ -94,47 +73,44 @@ def visualize_expenses():
     plt.show()
 
 def filter_expenses():
-    expenses = read_csv(EXPENSES_FILE)
-    if not expenses:
-        print("No expenses recorded yet.")
-        return
-    
-    # Filtering expenses by min-max amount (range)
     min_amount = float(input("Enter minimum amount: "))
     max_amount = float(input("Enter maximum amount: "))
+
+    expenses = fetch_all(
+        "SELECT date, category, amount FROM expenses WHERE amount BETWEEN ? AND ?", 
+        (min_amount, max_amount)
+    )
+    if not expenses:
+        print("No expenses found in the specified range.")
+        return
 
     print("\nFiltered Expenses")
     print(f"{'Date':<15}{'Category':<15}{'Amount':<10}")
     print('-' * 40)
-
-    for row in expenses:
-        amount = float(row['Amount'])
-        if min_amount <= amount <= max_amount:
-            print(f"{row['Date']:<15}{row['Category']:<15}₹{row['Amount']:<10}")
+    for date, category, amount in expenses:
+        print(f"{date:<15}{category:<15}₹{amount:.2f}")
 
 def create_backup():
     backup_file = 'backup_expenses.csv'
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all("SELECT date, category, amount FROM expenses")
+
     with open(backup_file, 'w', newline='') as file:
         writer = csv.DictWriter(file, fieldnames=['Date', 'Category', 'Amount'])
         writer.writeheader()
-        writer.writerows(expenses)
+        writer.writerows([{'Date': date, 'Category': category, 'Amount': amount} for date, category, amount in expenses])
+    
     print(f'Backup created successfully: {backup_file}')
 
 def monthly_expense_trends():
-    expenses = read_csv(EXPENSES_FILE)
+    expenses = fetch_all(
+        "SELECT strftime('%Y-%m', date) AS month_year, SUM(amount) FROM expenses GROUP BY month_year"
+    )
     if not expenses:
         print("No expenses recorded yet.")
         return
     
-    trends = {}
-    for row in expenses:
-        month_year = row['Date'][:7]  # [:7] used to get YYYY-MM
-        amount = float(row['Amount'])
-        trends[month_year] = trends.get(month_year, 0) + amount
-    
-    months = list(trends.keys())
-    amounts = list(trends.values())
+    months = [row[0] for row in expenses]
+    amounts = [row[1] for row in expenses]
 
     plt.figure(figsize=(10, 6))
     plt.bar(months, amounts, color='skyblue')

@@ -1,8 +1,11 @@
-from src.utils import *
-from src.data_analysis import *
-from src.expense_management import *
+from utils import *
+from data_analysis import *
+from expense_management import *
 
-EXPENSES_FILE = 'data/expenses.csv'
+
+# Ensure the database is ready
+conn = connect_db()
+conn.close()
 
 print("Welcome to Your Personal Expense Tracker")
 while True:
@@ -27,8 +30,9 @@ while True:
     except ValueError:
         print('Enter a valid number.')
         continue
+
     if user_ans == 1:
-        add_expense()   
+        add_expense()
     elif user_ans == 2:
         display_expenses()
     elif user_ans == 3:
@@ -37,14 +41,12 @@ while True:
         display_monthly_report()
     elif user_ans == 5:
         # Sub-menu created for deleting records
-        delete_record = 0
         while True:
             try:
                 print("\nDeletion Options:")
                 print("1. Delete record by index")
                 print("2. Delete by category")
                 print("3. Delete by month & year")
-
                 user_delete_choice = int(input("Choose an option (1-3): "))
             except ValueError:
                 print("Enter a valid number")
